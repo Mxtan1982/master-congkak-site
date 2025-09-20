@@ -1,0 +1,87 @@
+@echo off
+setlocal enabledelayedexpansion
+
+title MASTER CONGKAK - Build & Install (Debug)
+echo ===============================
+echo  MASTER CONGKAK - One Click
+echo ===============================
+
+REM === 修改为你的项目目录 ===
+set "PROJECT_DIR=D:\MASTER CONGKAK"
+
+if not exist "%PROJECT_DIR%" (
+  echo [ERROR] Project folder not found: %PROJECT_DIR%
+  echo Edit PROJECT_DIR at the top of this .bat to your real path.
+  pause
+  exit /b 1
+)
+
+echo.
+echo [1/6] Checking ADB device...
+where adb >nul 2>nul || (
+  echo [WARN] adb not found in PATH. Trying default SDK location...
+  set "ADB_EXE=%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe"
+) 
+if not defined ADB_EXE set "ADB_EXE=adb"
+
+"%ADB_EXE%" devices
+echo If your device is not listed, enable USB debugging and authorize the PC.
+echo.
+
+echo [2/6] Copying web assets to Android project...
+cd /d "%PROJECT_DIR%"
+npx cap copy android || (
+  echo [ERROR] npx cap copy android failed.
+  pause
+  exit /b 1
+)
+
+echo.
+echo [3/6] Building debug APK...
+cd /d "%PROJECT_DIR%\android"
+IF EXIST gradlew (
+  call gradlew assembleDebug || (
+    echo [ERROR] gradlew assembleDebug failed.
+    pause
+    exit /b 1
+  )
+) ELSE (
+  echo [ERROR] gradlew not found. Open Android Studio once or ensure Gradle wrapper exists.
+  pause
+  exit /b 1
+)
+
+echo.
+echo [4/6] Uninstalling old Congkak packages (if any)...
+set "FOUND_PKG=0"
+for /f "tokens=1 delims=" %%P in ('"%ADB_EXE%" shell pm list packages ^| findstr /i congkak') do (
+  set "line=%%P"
+  set "pkg=!line:package:=!"
+  set "FOUND_PKG=1"
+  echo   -> uninstall !pkg!
+  "%ADB_EXE%" uninstall "!pkg!" >nul 2>nul
+)
+
+if "!FOUND_PKG!"=="0" (
+  echo   (No old congkak packages found, skipping uninstall.)
+)
+
+echo.
+echo [5/6] Installing new debug APK...
+set "APK_PATH=%PROJECT_DIR%\android\app\build\outputs\apk\debug\app-debug.apk"
+if not exist "!APK_PATH!" (
+  echo [ERROR] APK not found: !APK_PATH!
+  pause
+  exit /b 1
+)
+
+"%ADB_EXE%" install -r "!APK_PATH!" || (
+  echo [ERROR] adb install failed.
+  echo You may need to uninstall the exact package manually or change applicationId.
+  pause
+  exit /b 1
+)
+
+echo.
+echo [6/6] Done. Check your phone for MASTER CONGKAK.
+pause
